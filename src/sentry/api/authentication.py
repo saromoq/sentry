@@ -1,11 +1,13 @@
 from __future__ import absolute_import
 
+import json
+
 from django.contrib.auth.models import AnonymousUser
 from rest_framework.authentication import (BasicAuthentication, get_authorization_header)
 from rest_framework.exceptions import AuthenticationFailed
 
 from sentry.app import raven
-from sentry.models import ApiKey, ApiToken, Relay
+from sentry.models import ApiApplication, ApiKey, ApiToken, Relay
 from sentry.relay.utils import get_header_relay_id, get_header_relay_signature
 
 import semaphore
@@ -67,6 +69,38 @@ class ApiKeyAuthentication(QuietBasicAuthentication):
         })
 
         return (AnonymousUser(), key)
+
+
+class ClientIdSecretAuthentication(QuietBasicAuthentication):
+    """
+    Authenticates a Sentry Application using its Client ID and Secret
+
+    This will be the method by which we identify which Sentry Application is
+    making the request, for any requests not scoped to an installation.
+
+    For example, the request to exchange a Grant Code for an Api Token.
+    """
+
+    def authenticate(self, request):
+        data = json.loads(request.body)
+        client_id = data.get('client_id')
+        client_secret = data.get('client_secret')
+
+        if not client_id or not client_secret:
+            raise AuthenticationFailed('Missing Client ID or Secret')
+
+        try:
+            application = ApiApplication.objects.get(client_id=client_id)
+        except ApiApplication.DoesNotExist:
+            raise AuthenticationFailed('Invalid Client ID')
+
+        if not application.client_secret == client_secret:
+            raise AuthenticationFailed('Invalid Client ID / Secret pair')
+
+        try:
+            return (application.sentry_app.proxy_user, None)
+        except Exception:
+            raise AuthenticationFailed('Invalid authentication')
 
 
 class TokenAuthentication(QuietBasicAuthentication):
