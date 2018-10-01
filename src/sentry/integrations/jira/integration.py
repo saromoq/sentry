@@ -380,9 +380,9 @@ class JiraIntegration(IntegrationInstallation, IssueSyncMixin):
 
     def get_create_issue_config(self, group, **kwargs):
         fields = super(JiraIntegration, self).get_create_issue_config(group, **kwargs)
-
         params = kwargs.get('params', {})
-        default_project = self.get_project_defaults(group.project_id).get('project')
+        default_project = params.get('project') or self.get_project_defaults(
+            group.project_id).get('project')
         client = self.get_client()
 
         try:
@@ -394,7 +394,6 @@ class JiraIntegration(IntegrationInstallation, IssueSyncMixin):
             )
 
         try:
-            # TODO(lb): I have no idea what meta is here; just going off tests
             meta = resp['projects'][0]
             for project in resp['projects']:
                 if project['id'] == default_project:
@@ -566,6 +565,9 @@ class JiraIntegration(IntegrationInstallation, IssueSyncMixin):
             'description': issue['fields']['description'],
             'key': issue_key,
         }
+
+    def merge_issue_config_defaults(self, project_id, config):
+        return config
 
     def sync_assignee_outbound(self, external_issue, user, assign=True, **kwargs):
         """
