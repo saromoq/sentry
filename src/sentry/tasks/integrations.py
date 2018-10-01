@@ -11,7 +11,6 @@ from sentry.models import (
 )
 from sentry.mediators.plugins import Migrator
 
-from sentry.integrations.migrate import PluginMigrator
 from sentry.integrations.exceptions import ApiError, ApiUnauthorized, IntegrationError
 from sentry.tasks.base import instrumented_task, retry
 
@@ -208,10 +207,6 @@ def migrate_repo(repo_id, integration_id, organization_id):
             integration=integration,
             organization=Organization.objects.get(id=organization_id),
         )
-        PluginMigrator(
-            integration,
-            Organization.objects.get(id=organization_id),
-        ).call()
 
 
 @instrumented_task(
@@ -227,14 +222,14 @@ def kickoff_vsts_subscription_check():
         integration__status=ObjectStatus.VISIBLE,
         status=ObjectStatus.VISIBLE,
     ).select_related('integration')
-    six_hours_from_now = time() - mktime(timedelta(hours=6).timetuple())
+    six_hours_ago = time() - mktime(timedelta(hours=6).timetuple())
     for org_integration in organization_integrations:
         organization_id = org_integration.organization_id
         integration = org_integration.integration
 
         try:
             if 'subscription' not in integration.metadata or integration.metadata[
-                    'subscription']['check'] > six_hours_from_now:
+                    'subscription']['check'] > six_hours_ago:
                 continue
         except KeyError:
             pass
